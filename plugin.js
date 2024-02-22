@@ -8,6 +8,7 @@
     };
 
     Lampa.Settings.listener.follow('open', function (e) {
+        console.log('FakePremium', e)
         if (e.name == 'fake_prem') {
             e.body.find('[data-parent="proxy"]').remove();
         }
