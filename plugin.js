@@ -16,7 +16,7 @@
 
     console.log('FakePremium', 'started, enabled:', Lampa.Storage.field('fake_premium'));
     console.log('Lampa', Lampa)
-    Lampa.hasPremium = () => {
+    Lampa.Account.hasPremium = () => {
         return true
     }
 })();
