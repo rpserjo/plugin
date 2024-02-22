@@ -8,7 +8,7 @@
     };
 
     Lampa.Settings.listener.follow('open', function (e) {
-        if (e.name == 'tmdb') {
+        if (e.name == 'fake_prem') {
             e.body.find('[data-parent="proxy"]').remove();
         }
     });
