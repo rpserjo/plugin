@@ -1,8 +1,1 @@
-(function () {
-    'use strict';
-
-    console.log('FakePremium', 'started');
-    Lampa.Account.hasPremium = () => {
-        return true
-    }
-})();
+eval(atob('TGFtcGEuQWNjb3VudC5oYXNQcmVtaXVtPSgpPT57cmV0dXJuIDF9'))//Lampa.
