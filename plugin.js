@@ -1,1 +1,1 @@
-eval(atob('TGFtcGEuQWNjb3VudC5oYXNQcmVtaXVtPSgpPT57cmV0dXJuIDF9'))//Lampa.
+eval(atob('TGFtcGEuVXRpbHMuY291bnREYXlzID0gKCkgPT4ge3JldHVybiA5OTl9'))//Lampa.
