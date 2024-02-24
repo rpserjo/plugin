@@ -1,0 +1,1 @@
+eval(atob('TGFtcGEuQWNjb3VudCA9IHsuLi5MYW1wYS5BY2NvdW50LCBoYXNQcmVtaXVtOiAoKSA9PiB7cmV0dXJuIDF9fQ=='))//Lampa.
