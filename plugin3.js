@@ -1,0 +1,1 @@
+Lampa.Lang.selected=()=>false
