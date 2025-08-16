@@ -1,0 +1,12 @@
+{
+  "name": "DevTools Response Saver",
+  "version": "1.0",
+  "manifest_version": 3,
+  "permissions": ["debugger", "downloads", "scripting"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "Start Capture"
+  }
+}
