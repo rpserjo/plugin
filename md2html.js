@@ -2,7 +2,9 @@ export const md2html = (markdown) => {
     // Guard: ensure input is a string
     if (typeof markdown !== 'string') markdown = String(markdown ?? '');
     const state = createState(markdown);
+    console.log('State', state);
     const blocks = parseBlocks(state);
+    console.log('Blocks', blocks)
     const html = renderBlocks(blocks, state);
     return html.trim();
 }
@@ -164,55 +166,55 @@ const parseBlocks = (state) => {
 
             // iterate items at the same indent level
             while (i < lines.length) {
-            const potential = peek();
-            const liMatch = potential && potential.match(/^(\s{0,3})((?:[+\-*])|(?:\d{1,9}[.)]))\s+(.*)$/);
-            if (!liMatch || liMatch[1].length !== listIndent) break; // only same-indent markers start new items
-            next(); // consume the marker line
-            const markerIndent = liMatch[1].length;
-            const markerToken = liMatch[2];
-            const firstContent = liMatch[3];
-            const markerLen = markerToken.length;
-            const contentIndent = markerIndent + markerLen + 1; // column where content begins
+                const potential = peek();
+                const liMatch = potential && potential.match(/^(\s{0,3})((?:[+\-*])|(?:\d{1,9}[.)]))\s+(.*)$/);
+                if (!liMatch || liMatch[1].length !== listIndent) break; // only same-indent markers start new items
+                next(); // consume the marker line
+                const markerIndent = liMatch[1].length;
+                const markerToken = liMatch[2];
+                const firstContent = liMatch[3];
+                const markerLen = markerToken.length;
+                const contentIndent = markerIndent + markerLen + 1; // column where content begins
 
-            const itemLines = [ firstContent ];
+                const itemLines = [ firstContent ];
 
-            // collect continuation lines for this item
-            while (i < lines.length) {
-                const l = peek();
-                if (l === null) break;
-                if (/^\s*$/.test(l)) { itemLines.push(next()); continue; }
+                // collect continuation lines for this item
+                while (i < lines.length) {
+                    const l = peek();
+                    if (l === null) break;
+                    if (/^\s*$/.test(l)) { itemLines.push(next()); continue; }
 
-                // If there's another list marker at or before the listIndent, it's a sibling/parent -> stop
-                const nextLi = l.match(/^(\s{0,3})((?:[+\-*])|(?:\d{1,9}[.)]))\s+(.*)$/);
-                if (nextLi && nextLi[1].length <= listIndent) break;
+                    // If there's another list marker at or before the listIndent, it's a sibling/parent -> stop
+                    const nextLi = l.match(/^(\s{0,3})((?:[+\-*])|(?:\d{1,9}[.)]))\s+(.*)$/);
+                    if (nextLi && nextLi[1].length <= listIndent) break;
 
-                // If there's a nested list marker (indent > listIndent), treat it as continuation line
-                if (nextLi && nextLi[1].length > listIndent) { 
-                    itemLines.push(next()); 
-                    continue;
+                    // If there's a nested list marker (indent > listIndent), treat it as continuation line
+                    if (nextLi && nextLi[1].length > listIndent) { 
+                        itemLines.push(next()); 
+                        continue;
+                    }
+
+                    // Indented code block inside item (4+ spaces)
+                    if (/^\s{4,}\S/.test(l)) { 
+                        itemLines.push(trimIndent(next(), 4)); 
+                        continue; 
+                    }
+
+                    // Normal continuation: remove contentIndent if possible, else remove markerIndent+1
+                    const leading = (l.match(/^(\s*)/) || ['',''])[1].length;
+                    if (leading >= contentIndent) {
+                        itemLines.push(trimIndent(next(), contentIndent));
+                    } else if (leading > 0) {
+                        itemLines.push(trimIndent(next(), markerIndent + 1));
+                    } else {
+                        break; // not a continuation
+                    }
                 }
 
-                // Indented code block inside item (4+ spaces)
-                if (/^\s{4,}\S/.test(l)) { 
-                    itemLines.push(trimIndent(next(), 4)); 
-                    continue; 
-                }
-
-                // Normal continuation: remove contentIndent if possible, else remove markerIndent+1
-                const leading = (l.match(/^(\s*)/) || ['',''])[1].length;
-                if (leading >= contentIndent) {
-                    itemLines.push(trimIndent(next(), contentIndent));
-                } else if (leading > 0) {
-                    itemLines.push(trimIndent(next(), markerIndent + 1));
-                } else {
-                    break; // not a continuation
-                }
-            }
-
-            const itemState = createState(itemLines.join("\n"));
-            const itemBlocks = parseBlocks(itemState);
-            const hasBlank = itemLines.some(l => /^\s*$/.test(l));
-            if (hasBlank) list.tight = false;
+                const itemState = createState(itemLines.join("\n"));
+                const itemBlocks = parseBlocks(itemState);
+                const hasBlank = itemLines.some(l => /^\s*$/.test(l));
+                // if (hasBlank) list.tight = false;
                 list.items.push({ type: 'list_item', children: itemBlocks });
             }
 
@@ -315,10 +317,10 @@ const renderBlocks = (blocks, state) => {
                 const attrs = b.ordered && b.start !== 1 ? ` start="${b.start}"` : ''; 
                 const itemsHtml = b.items.map(it => {
                     let inner = renderBlocks(it.children, state); 
-                    if (b.tight ){
+                    if (b.tight){
                         inner = inner.replace(/<p>/g,'').replace(/<\/p>/g,''); 
                     }
-                    return `<li>${inner}</li>`; 
+                    return renderListItem(inner); 
                 }).join("\n"); 
                 out.push(`<${tag}${attrs}>\n${itemsHtml}\n</${tag}>`); 
                 break;
@@ -429,4 +431,15 @@ const renderInlines = (text,state) => {
 const lookupRef = (label, state) => {
     const norm = normalizeLabel(label || ''); 
     return state.linkRefs.get(norm) || null;
+}
+
+const renderListItem = (content) => {
+    console.log(content)
+    const trimmed = content.trim();
+    console.log('--', trimmed)
+
+    if (/^<p>[\s\S]*<\/p>$/.test(trimmed)) {
+        return '<li>' + trimmed.replace(/^<p>|<\/p>$/g, '') + '</li>';
+    }
+    return '<li>' + trimmed + '</li>';
 }
