@@ -184,7 +184,7 @@
                     type: 'button',
                     callback: () => addColumnAfter(),
                     title: 'Add column after',
-                    b64: 'PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiAgZmlsbD0ibm9uZSIgc3Ryb2tlPSJjdXJyZW50Q29sb3IiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cGF0aCBzdHJva2U9Im5vbmUiIGQ9Ik0wIDBoMjR2MjRIMHoiIGZpbGw9Im5vbmUiLz48cGF0aCBkPSJNNiA0aDRhMSAxIDAgMCAxIDEgMXYxNGExIDEgMCAwIDEgLTEgMWgtNGExIDEgMCAwIDEgLTEgLTF2LTE0YTEgMSAwIDAgMSAxIC0xeiIvPjxwYXRoIGQ9Ik0xNSAxMmw0IDAiLz48cGF0aCBkPSJNMTcgMTBsMCA0Ii8'
+                    b64: 'PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiAgZmlsbD0ibm9uZSIgc3Ryb2tlPSJjdXJyZW50Q29sb3IiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cGF0aCBzdHJva2U9Im5vbmUiIGQ9Ik0wIDBoMjR2MjRIMHoiIGZpbGw9Im5vbmUiLz48cGF0aCBkPSJNNiA0aDRhMSAxIDAgMCAxIDEgMXYxNGExIDEgMCAwIDEgLTEgMWgtNGExIDEgMCAwIDEgLTEgLTF2LTE0YTEgMSAwIDAgMSAxIC0xeiIvPjxwYXRoIGQ9Ik0xNSAxMmw0IDAiLz48cGF0aCBkPSJNMTcgMTBsMCA0Ii8+PC9zdmc+'
                 },
                 {
                     type: 'button',
@@ -409,6 +409,8 @@
                         tableRow.appendChild(tableCell);
                         tableCell.addEventListener('input', () => {
                             state.data[rowIndex][cellIndex].cellContent = tableCell.innerText;
+                            renderMarkdown();
+                            renderPreview();
                         });
                         tableCell.addEventListener('focus', () => {
                             state.selected = { row: rowIndex, cell: cellIndex };
@@ -429,14 +431,13 @@
                 root.appendChild(table);
                 updateSelected();
 
-                const mdTable = convertToMarkdown();
-                const mdDetails = generateDetails();
-                let mdOutput = mdTable;
-                if (mdDetails !== null)  mdOutput = mdOutput + '\n\n### Подробнее\n\n' + mdDetails;
-                document.querySelector('textarea#markdown-output').value = mdOutput;
+                renderMarkdown();
+                renderPreview();
+            }
 
-                const html = md2html(mdOutput);
-                document.querySelector('div#preview-root').innerHTML = html;
+            const renderPreview = () => {
+                const md = document.querySelector('textarea#markdown-output').value;
+                document.querySelector('div#preview-root').innerHTML = md2html(md);
             }
 
             const renderTable = () => {
@@ -455,7 +456,7 @@
 
             const addRow = (at) => {
                 const cols = state.data[0]?.length || 1;
-                const blank = Array(cols).fill({ cellContent: '', cellAttributes: {} });
+                const blank = Array(cols).fill().map(() => new Object({ cellContent:'', cellAttributes: {} }));
                 const idx = clamp(at, 1, state.data.length);
                 state.data.splice(idx, 0, blank);
                 state.selected.row = (at === state.selected.row) ? state.selected.row + 1 : state.selected.row;
@@ -517,14 +518,14 @@
 
             const convertToMarkdown = () => {
                 const detailsLabel = document.querySelector('input#details-label').value;
+                if (state.data.length < 1) return null;
                 const lines = state.data.map((row, rowIndex) => {
                     return `| ${row.map(cell => {
-                        let cellContent = cell.cellContent.trimEnd().replaceAll('\n', '<p>');
-                        if (cell.cellAttributes.anchor) cellContent = `<a id="${cell.cellAttributes.anchor}"></a> ` + cellContent;
-                        if (cell.cellAttributes.details) cellContent = cellContent + `<p>[${detailsLabel}](#${cell.cellAttributes.details})`;
-                        return cellContent;
-                    }
-                ).join(' | ')} |`;
+                            let cellContent = cell.cellContent.trimEnd().replaceAll('\n', '<p>');
+                            if (cell.cellAttributes.anchor) cellContent = `<a id="${cell.cellAttributes.anchor}"></a> ` + cellContent;
+                            if (cell.cellAttributes.details) cellContent = cellContent + `<p>[${detailsLabel}](#${cell.cellAttributes.details})`;
+                            return cellContent;
+                    }).join(' | ')} |`;
                 });
 
                 const markdown = [lines[0], `| ${Array(state.data[0].length).fill('---').join(' | ')} |`, ...lines.slice(1)];
