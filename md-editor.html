@@ -1,0 +1,652 @@
+<html>
+    <head>
+        <style>
+            :root {
+                --border-color: #333;
+                --bg-color: #fff;
+            }
+
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+
+            body {
+                background-color: var(--bg-color);
+                display: flex;
+                flex-direction: column;
+                height: 100vh;
+            }
+
+            section#markdown {
+                height: 35%;
+                min-height: 300px;
+                display: flex;
+                flex-direction: column;
+                flex: 0 0 35%;
+            }
+
+            section#editor {
+                min-height: 300px;
+                display: flex;
+                flex-direction: column;
+                flex: 0 0 65%; 
+                overflow: hidden;
+            }
+
+            div.tabs-list {
+                display: flex;
+                gap: 5px;
+                margin-bottom: -1px;
+                z-index: 5;
+            }
+
+            div.tab-panel {
+                border: 1px solid var(--border-color);
+                height: 100%;
+                width: 100%;
+                overflow: hidden;         
+            }
+
+            button.tab {
+                border: 1px solid var(--border-color);
+                padding: 5px;
+                cursor: pointer;
+            }
+
+            button.tab.selected {
+                border-bottom: 1px solid var(--bg-color);
+                background-color: var(--bg-color);
+            }
+
+            textarea {
+                height: 100%;
+                width: 100%;
+                padding: 5px;
+                border: none;
+                resize: none;
+            }
+
+            textarea:focus {
+                outline: none;
+            }
+
+            #editor-wrap {
+                display: flex;
+                flex-direction: column;
+                width: 100%;
+                height: 100%;
+            }
+
+            .editor-controls {
+                border-bottom: 1px solid var(--border-color);
+                min-height: 36px;
+                display: flex;
+                gap: 5px;
+                padding: 3px;
+                flex: 0 0 auto;
+                overflow: auto;
+            }
+            
+            #table-root {
+                flex: 1;
+                overflow: auto;
+                padding: 5px;
+            }
+
+            table {
+                border-collapse: separate;
+                border-spacing: 0;
+            }
+
+            th, td {
+                border: 1px solid #333; 
+                padding: 8px 10px; 
+                min-width: 120px; 
+                max-width: 320px; 
+                overflow-wrap: anywhere; 
+            }
+
+            td.selected, th.selected {
+                box-shadow: 0 0 0 2px #22d3ee inset;
+            }
+
+            td[contenteditable="true"], th[contenteditable="true"] { 
+                outline: none;
+            }
+
+            tr:nth-child(even) td {
+                background: #f0f0f0;
+            }
+
+            th {
+                position: relative; 
+                background: #eee; 
+                font-weight: 600;
+            }
+
+            td.has-anchor, td.has-details {
+                position: relative;
+            }
+
+            td.has-anchor::before, td.has-details::before {
+                position: absolute;
+                right: 2px;
+                top: 2px;
+                font-size: 12px;
+                font-weight: 700;
+                color: teal;
+            }
+
+            td.has-anchor::before {
+                content: "A";
+            }
+
+            td.has-details::before {
+                content: "D";
+            }
+
+            td.has-anchor.has-details::before {
+                content: "AD";
+            }
+
+            #preview-root {
+                overflow: auto;
+                height: 100%;
+                width: 100%;
+                padding: 5px;
+            }
+        </style>
+        <script>
+            const state = {
+                data: [],
+                selected: {
+                    row: 0,
+                    cell: 0
+                }
+            }
+
+            const editorControls = [
+                {
+                    type: 'button',
+                    callback: () => renderTable(),
+                    title: 'Parse markdown',
+                    b64: 'PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiAgZmlsbD0ibm9uZSIgc3Ryb2tlPSJjdXJyZW50Q29sb3IiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cGF0aCBzdHJva2U9Im5vbmUiIGQ9Ik0wIDBoMjR2MjRIMHoiIGZpbGw9Im5vbmUiLz48cGF0aCBkPSJNMyA1bTAgMmEyIDIgMCAwIDEgMiAtMmgxNGEyIDIgMCAwIDEgMiAydjEwYTIgMiAwIDAgMSAtMiAyaC0xNGEyIDIgMCAwIDEgLTIgLTJ6Ii8+PHBhdGggZD0iTTcgMTV2LTZsMiAybDIgLTJ2NiIvPjxwYXRoIGQ9Ik0xNCAxM2wyIDJsMiAtMm0tMiAydi02Ii8+PC9zdmc+'
+                },
+                {
+                    type: 'button',
+                    callback: () => addColumnBefore(),
+                    title: 'Add column before',
+                    b64: 'PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiAgZmlsbD0ibm9uZSIgc3Ryb2tlPSJjdXJyZW50Q29sb3IiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cGF0aCBzdHJva2U9Im5vbmUiIGQ9Ik0wIDBoMjR2MjRIMHoiIGZpbGw9Im5vbmUiLz48cGF0aCBkPSJNMTQgNGg0YTEgMSAwIDAgMSAxIDF2MTRhMSAxIDAgMCAxIC0xIDFoLTRhMSAxIDAgMCAxIC0xIC0xdi0xNGExIDEgMCAwIDEgMSAtMXoiLz48cGF0aCBkPSJNNSAxMmw0IDAiLz48cGF0aCBkPSJNNyAxMGwwIDQiLz48L3N2Zz4'
+                },
+                {
+                    type: 'button',
+                    callback: () => addColumnAfter(),
+                    title: 'Add column after',
+                    b64: 'PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiAgZmlsbD0ibm9uZSIgc3Ryb2tlPSJjdXJyZW50Q29sb3IiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cGF0aCBzdHJva2U9Im5vbmUiIGQ9Ik0wIDBoMjR2MjRIMHoiIGZpbGw9Im5vbmUiLz48cGF0aCBkPSJNNiA0aDRhMSAxIDAgMCAxIDEgMXYxNGExIDEgMCAwIDEgLTEgMWgtNGExIDEgMCAwIDEgLTEgLTF2LTE0YTEgMSAwIDAgMSAxIC0xeiIvPjxwYXRoIGQ9Ik0xNSAxMmw0IDAiLz48cGF0aCBkPSJNMTcgMTBsMCA0Ii8'
+                },
+                {
+                    type: 'button',
+                    callback: () => removeColumn(),
+                    title: 'Remove column',
+                    b64: 'PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiAgZmlsbD0ibm9uZSIgc3Ryb2tlPSJjdXJyZW50Q29sb3IiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cGF0aCBzdHJva2U9Im5vbmUiIGQ9Ik0wIDBoMjR2MjRIMHoiIGZpbGw9Im5vbmUiLz48cGF0aCBkPSJNNiA0aDRhMSAxIDAgMCAxIDEgMXYxNGExIDEgMCAwIDEgLTEgMWgtNGExIDEgMCAwIDEgLTEgLTF2LTE0YTEgMSAwIDAgMSAxIC0xeiIvPjxwYXRoIGQ9Ik0xNiAxMGw0IDQiLz48cGF0aCBkPSJNMTYgMTRsNCAtNCIvPjwvc3ZnPg=='
+                },
+                {
+                    type: 'button',
+                    callback: () => addRowBefore(),
+                    title: 'Add row before',
+                    b64: 'PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiAgZmlsbD0ibm9uZSIgc3Ryb2tlPSJjdXJyZW50Q29sb3IiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cGF0aCBzdHJva2U9Im5vbmUiIGQ9Ik0wIDBoMjR2MjRIMHoiIGZpbGw9Im5vbmUiLz48cGF0aCBkPSJNNCAxOHYtNGExIDEgMCAwIDEgMSAtMWgxNGExIDEgMCAwIDEgMSAxdjRhMSAxIDAgMCAxIC0xIDFoLTE0YTEgMSAwIDAgMSAtMSAtMXoiLz48cGF0aCBkPSJNMTIgOXYtNCIvPjxwYXRoIGQ9Ik0xMCA3bDQgMCIvPjwvc3ZnPg'
+                },
+                {
+                    type: 'button',
+                    callback: () => addRowAfter(),
+                    title: 'Add row after',
+                    b64: 'PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiAgZmlsbD0ibm9uZSIgc3Ryb2tlPSJjdXJyZW50Q29sb3IiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cGF0aCBzdHJva2U9Im5vbmUiIGQ9Ik0wIDBoMjR2MjRIMHoiIGZpbGw9Im5vbmUiLz48cGF0aCBkPSJNMjAgNnY0YTEgMSAwIDAgMSAtMSAxaC0xNGExIDEgMCAwIDEgLTEgLTF2LTRhMSAxIDAgMCAxIDEgLTFoMTRhMSAxIDAgMCAxIDEgMXoiLz48cGF0aCBkPSJNMTIgMTVsMCA0Ii8+PHBhdGggZD0iTTE0IDE3bC00IDAiLz48L3N2Zz4='
+                },
+                {
+                    type: 'button',
+                    callback: () => removeRow(),
+                    title: 'Remove row',
+                    b64: 'PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiAgZmlsbD0ibm9uZSIgc3Ryb2tlPSJjdXJyZW50Q29sb3IiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cGF0aCBzdHJva2U9Im5vbmUiIGQ9Ik0wIDBoMjR2MjRIMHoiIGZpbGw9Im5vbmUiLz48cGF0aCBkPSJNMjAgNnY0YTEgMSAwIDAgMSAtMSAxaC0xNGExIDEgMCAwIDEgLTEgLTF2LTRhMSAxIDAgMCAxIDEgLTFoMTRhMSAxIDAgMCAxIDEgMXoiLz48cGF0aCBkPSJNMTAgMTZsNCA0Ii8+PHBhdGggZD0iTTEwIDIwbDQgLTQiLz48L3N2Zz4='
+                },
+                {
+                    type: 'input',
+                    id: 'numbers-column',
+                    size: 10,
+                    title: 'Numbers column'
+                },
+                {
+                    type: 'input',
+                    id: 'parameters-column',
+                    size: 10,
+                    title: 'Parameters column'
+                },
+                {
+                    type: 'button',
+                    callback: () => insertAnchor(),
+                    title: 'Insert anchor',
+                    b64: 'PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiAgZmlsbD0ibm9uZSIgc3Ryb2tlPSJjdXJyZW50Q29sb3IiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cGF0aCBzdHJva2U9Im5vbmUiIGQ9Ik0wIDBoMjR2MjRIMHoiIGZpbGw9Im5vbmUiLz48cGF0aCBkPSJNMTIgOXYxMm0tOCAtOGE4IDggMCAwIDAgMTYgMG0xIDBoLTJtLTE0IDBoLTIiLz48cGF0aCBkPSJNMTIgNm0tMyAwYTMgMyAwIDEgMCA2IDBhMyAzIDAgMSAwIC02IDAiLz48L3N2Zz4='
+                },
+                {
+                    type: 'button',
+                    callback: () => removeAnchor(),
+                    title: 'Remove anchor',
+                    b64: 'PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiAgZmlsbD0ibm9uZSIgc3Ryb2tlPSJjdXJyZW50Q29sb3IiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cGF0aCBzdHJva2U9Im5vbmUiIGQ9Ik0wIDBoMjR2MjRIMHoiIGZpbGw9Im5vbmUiLz48cGF0aCBkPSJNMTIgMTJ2OSIgLz48cGF0aCBkPSJNNCAxM2E4IDggMCAwIDAgMTQuMTM4IDUuMTNtMS40NCAtMi41NmE3Ljk5IDcuOTkgMCAwIDAgLjQyMiAtMi41NyIvPjxwYXRoIGQ9Ik0yMSAxM2gtMiIvPjxwYXRoIGQ9Ik01IDEzaC0yIi8+PHBhdGggZD0iTTEyLjg2NiA4Ljg3M2EzIDMgMCAxIDAgLTMuNzM3IC0zLjc0NyIvPjxwYXRoIGQ9Ik0zIDNsMTggMTgiLz48L3N2Zz4='
+                },
+                {
+                    type: 'button',
+                    callback: () => insertDetailsLink(),
+                    title: 'Insert details link',
+                    b64: 'PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiAgZmlsbD0ibm9uZSIgc3Ryb2tlPSJjdXJyZW50Q29sb3IiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cGF0aCBzdHJva2U9Im5vbmUiIGQ9Ik0wIDBoMjR2MjRIMHoiIGZpbGw9Im5vbmUiLz48cGF0aCBkPSJNOSAxNWw2IC02IiAvPjxwYXRoIGQ9Ik0xMSA2bC40NjMgLS41MzZhNSA1IDAgMCAxIDcuMDcyIDBhNC45OTMgNC45OTMgMCAwIDEgLS4wMDEgNy4wNzIiLz48cGF0aCBkPSJNMTIuNjAzIDE4LjUzNGE1LjA3IDUuMDcgMCAwIDEgLTcuMTI3IDBhNC45NzIgNC45NzIgMCAwIDEgMCAtNy4wNzFsLjUyNCAtLjQ2MyIvPjxwYXRoIGQ9Ik0xNiAxOWg2Ii8+PHBhdGggZD0iTTE5IDE2djYiLz48L3N2Zz4='
+                },
+                {
+                    type: 'button',
+                    callback: () => removeDetailsLink(),
+                    title: 'Remove details link',
+                    b64: 'PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiAgZmlsbD0ibm9uZSIgc3Ryb2tlPSJjdXJyZW50Q29sb3IiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cGF0aCBzdHJva2U9Im5vbmUiIGQ9Ik0wIDBoMjR2MjRIMHoiIGZpbGw9Im5vbmUiLz48cGF0aCBkPSJNOSAxNWw2IC02IiAvPjxwYXRoIGQ9Ik0xMSA2bC40NjMgLS41MzZhNSA1IDAgMSAxIDcuMDcxIDcuMDcybC0uNTM0IC40NjQiLz48cGF0aCBkPSJNMTIuNjAzIDE4LjUzNGE1LjA3IDUuMDcgMCAwIDEgLTcuMTI3IDBhNC45NzIgNC45NzIgMCAwIDEgMCAtNy4wNzFsLjUyNCAtLjQ2MyIvPjxwYXRoIGQ9Ik0xNiAxOWg2Ii8+PC9zdmc+'
+                },
+                {
+                    type: 'input',
+                    id: 'details-label',
+                    size: 15,
+                    title: 'Details label',
+                    default: 'Подробнее'
+                },
+                {
+                    type: 'input',
+                    id: 'text-find',
+                    size: 10,
+                    title: 'Find',
+                    default: ''
+                },
+                {
+                    type: 'input',
+                    id: 'text-replace',
+                    size: 10,
+                    title: 'Replace',
+                    default: ''
+                },
+                {
+                    type: 'button',
+                    callback: () => replaceTextAll(),
+                    title: 'Replace all',
+                    b64: 'PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiAgZmlsbD0iY3VycmVudENvbG9yIj48cGF0aCBzdHJva2U9Im5vbmUiIGQ9Ik0wIDBoMjR2MjRIMHoiIGZpbGw9Im5vbmUiLz48cGF0aCBkPSJNOCAyaC00YTIgMiAwIDAgMCAtMiAydjRhMiAyIDAgMCAwIDIgMmg0YTIgMiAwIDAgMCAyIC0ydi00YTIgMiAwIDAgMCAtMiAtMnoiLz48cGF0aCBkPSJNMjAgMTRoLTRhMiAyIDAgMCAwIC0yIDJ2NGEyIDIgMCAwIDAgMiAyaDRhMiAyIDAgMCAwIDIgLTJ2LTRhMiAyIDAgMCAwIC0yIC0yeiIvPjxwYXRoIGQ9Ik0xNi43MDcgMi4yOTNhMSAxIDAgMCAxIC4wODMgMS4zMmwtLjA4MyAuMDk0bC0xLjI5MyAxLjI5M2gzLjU4NmEzIDMgMCAwIDEgMi45OTUgMi44MjRsLjAwNSAuMTc2djNhMSAxIDAgMCAxIC0xLjk5MyAuMTE3bC0uMDA3IC0uMTE3di0zYTEgMSAwIDAgMCAtLjg4MyAtLjk5M2wtLjExNyAtLjAwN2gtMy41ODVsMS4yOTIgMS4yOTNhMSAxIDAgMCAxIC0xLjMyIDEuNDk3bC0uMDk0IC0uMDgzbC0zIC0zYS45OCAuOTggMCAwIDEgLS4yOCAtLjg3MmwuMDM2IC0uMTQ2bC4wNCAtLjEwNGMuMDU4IC0uMTI2IC4xNCAtLjI0IC4yNDUgLS4zMzRsMi45NTkgLTIuOTU4YTEgMSAwIDAgMSAxLjQxNCAweiIvPjxwYXRoIGQ9Ik0zIDEyYTEgMSAwIDAgMSAuOTkzIC44ODNsLjAwNyAuMTE3djNhMSAxIDAgMCAwIC44ODMgLjk5M2wuMTE3IC4wMDdoMy41ODVsLTEuMjkyIC0xLjI5M2ExIDEgMCAwIDEgLS4wODMgLTEuMzJsLjA4MyAtLjA5NGExIDEgMCAwIDEgMS4zMiAtLjA4M2wuMDk0IC4wODNsMyAzYS45OCAuOTggMCAwIDEgLjI4IC44NzJsLS4wMzYgLjE0NmwtLjA0IC4xMDRhMS4wMiAxLjAyIDAgMCAxIC0uMjQ1IC4zMzRsLTIuOTU5IDIuOTU4YTEgMSAwIDAgMSAtMS40OTcgLTEuMzJsLjA4MyAtLjA5NGwxLjI5MSAtMS4yOTNoLTMuNTg0YTMgMyAwIDAgMSAtMi45OTUgLTIuODI0bC0uMDA1IC0uMTc2di0zYTEgMSAwIDAgMSAxIC0xeiIvPjwvc3ZnPg=='
+                }
+            ];
+            
+            const renderTableEditorControls = () => {
+                const root = document.querySelector('#editor-controls');
+
+                root.innerHTML = '';
+
+                editorControls.forEach(control => {
+                    const el = document.createElement(control.type);
+                    if (control.type === 'button') {
+                        el.onclick = control.callback;
+                        el.innerHTML = atob(control.b64);
+                    }
+                    if (control.type === 'input') {
+                        el.type = 'text';
+                        el.size = control.size;
+                        el.setAttribute('id', control.id);
+                        el.setAttribute('placeholder', control.title);
+                        if (control.default) el.value = control.default;
+                    }
+                    el.setAttribute('title', control.title);
+
+                    root.appendChild(el);
+                });
+            }
+
+            const initTabs = () => {
+                const tabSets = document.querySelectorAll('[data-tabs]');
+
+                tabSets.forEach(tabSet => {
+                    const tabs = Array.from(tabSet.querySelectorAll('[role="tab"]'));
+                    const panels = Array.from(tabSet.querySelectorAll('[role="tabpanel"]'));
+
+                    const activateTab = (newTab, setFocus = false) => {
+                        tabs.forEach(tab => {
+                            const selected = (tab === newTab);
+                            tab.setAttribute('aria-selected', String(selected));
+                            tab.tabIndex = selected ? 0 : -1;
+                            (selected) ? tab.classList.add('selected') : tab.classList.remove('selected')
+                        });
+
+                        panels.forEach(panel => {
+                            const shouldShow = (panel.id === newTab.getAttribute('aria-controls'));
+                            if (shouldShow) {
+                                panel.style.display = 'flex';
+                            } else {
+                                panel.style.display = 'none';
+                            }
+                        });
+
+                        if (setFocus) newTab.focus();
+                    }
+
+                    tabs.forEach(tab => {
+                        tab.addEventListener('click', () => activateTab(tab, false));
+                    });
+
+                    const initial = tabs.find(tab => tab.getAttribute('aria-selected') === 'true') || tabs[0];
+                    if (initial) activateTab(initial, false);
+                });
+            }
+
+            document.addEventListener('DOMContentLoaded', () => {
+                renderTableEditorControls();
+                initTabs();
+            });
+
+            const isSeparatorRow = (row) => {
+                return row.every(cell => /^\s*:?-{3,}:?\s*$/.test(cell));
+            }
+
+            const normalizeRows = (rows) => {
+                const max = Math.max(...rows.map(r => r.length));
+                return rows.map(r => r.concat(Array(Math.max(0, max - r.length)).fill('')));
+            }
+
+            const clamp = (v, a, b) => {
+                return Math.max(a, Math.min(b, v));
+            }
+
+            const parseMarkdown = (md) => {
+                const detailsLabel = document.querySelector('input#details-label').value;
+                const anchorRegex = /<a\s+id="([^"]*)">(.*?)<\/a>/g;
+                const detailsRegex = new RegExp(`\\[([${detailsLabel}]+)\\]\\(#([^)]+)\\)`, 'g');
+                const lines = md.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
+                if (lines.length < 1) return;
+                const rows = lines.filter(line => line.includes('|')).map(line => {
+                    const stripped = line.replace(/^\||\|$/g, '');
+                    return stripped.split('|').map(s => s.replace(/\\\|/g,'|').replace(/<p>|<br\s*\/?>|<\/p>/gi, '\n').trim());
+                });
+
+                const header = rows[0];
+                const body = (isSeparatorRow(rows[1])) ? rows.slice(2) : rows.slice(1);
+                const table = normalizeRows([header, ...body]).map(row => row.map(cell => {
+                    const cellAttributes = {};
+                    const anchorsMatch = anchorRegex.exec(cell);
+                    const detailsMatch = detailsRegex.exec(cell);
+
+                    if (anchorsMatch) {
+                        cell = cell.replace(anchorsMatch[0], '');
+                        cellAttributes.anchor = anchorsMatch[1];
+                    }
+
+                    if (detailsMatch) {
+                        cell = cell.replace(detailsMatch[0], '');
+                        cellAttributes.details = detailsMatch[2];
+                    }
+
+                    return {
+                        cellContent: cell,
+                        cellAttributes                      
+                    }
+                }));
+
+                state.data = table;
+            }
+
+            const render = () => {
+                const root = document.querySelector('div#table-root');
+                root.innerHTML = '';
+
+                const table = document.createElement('table');
+                const tableHead = document.createElement('thead');
+                const tableBody = document.createElement('tbody');
+
+                state.data.forEach((row, rowIndex) => {
+                    const tableRow = document.createElement('tr');
+                    row.forEach((cell, cellIndex) => {
+                        const tableCell = document.createElement(rowIndex === 0 ? 'th' : 'td');
+                        tableCell.innerText = cell.cellContent;
+                        if (cell.cellAttributes.anchor) tableCell.classList.add('has-anchor');
+                        if (cell.cellAttributes.details) tableCell.classList.add('has-details');                   
+                        tableCell.contentEditable = true;
+                        tableRow.appendChild(tableCell);
+                        tableCell.addEventListener('input', () => {
+                            state.data[rowIndex][cellIndex].cellContent = tableCell.innerText;
+                        });
+                        tableCell.addEventListener('focus', () => {
+                            state.selected = { row: rowIndex, cell: cellIndex };
+                            updateSelected();
+                        });
+
+                        tableCell.addEventListener('select', () => {
+                            state.selected = { row: rowIndex, cell: cellIndex };
+                            updateSelected();
+                        });
+                    });
+
+                    (rowIndex === 0) ? tableHead.appendChild(tableRow) : tableBody.appendChild(tableRow);
+                });
+
+                table.appendChild(tableHead);
+                table.appendChild(tableBody);
+                root.appendChild(table);
+                updateSelected();
+
+                const mdTable = convertToMarkdown();
+                const mdDetails = generateDetails();
+                let mdOutput = mdTable;
+                if (mdDetails !== null)  mdOutput = mdOutput + '\n\n### Подробнее\n\n' + mdDetails;
+                document.querySelector('textarea#markdown-output').value = mdOutput;
+
+                const html = md2html(mdOutput);
+                document.querySelector('div#preview-root').innerHTML = html;
+            }
+
+            const renderTable = () => {
+                const mdContent = document.querySelector('textarea#markdown-source').value;
+                parseMarkdown(mdContent);
+                render();
+            }
+
+            const updateSelected = () => {
+                const root = document.querySelector('div#table-root');
+                root.querySelectorAll('.selected').forEach(cell => cell.classList.remove('selected'));
+                const selectedRow = root.querySelectorAll('tr')[state.selected.row];
+                const selectedCell = selectedRow?.children[state.selected.cell];
+                selectedCell?.classList.add('selected');
+            }
+
+            const addRow = (at) => {
+                const cols = state.data[0]?.length || 1;
+                const blank = Array(cols).fill({ cellContent: '', cellAttributes: {} });
+                const idx = clamp(at, 1, state.data.length);
+                state.data.splice(idx, 0, blank);
+                state.selected.row = (at === state.selected.row) ? state.selected.row + 1 : state.selected.row;
+                
+                render();
+            }
+
+            const addRowBefore = () => {
+                const idx = state.selected.row === 0 ? 1 : state.selected.row;
+                addRow(idx);
+            }
+
+            const addRowAfter = () => {
+                addRow(state.selected.row + 1); 
+            }
+
+            const addColumn = (at) => {
+                if (!state.data[0]) return;
+                const idx = clamp(at, 0, state.data[0]?.length);
+                state.data = state.data.map(row => {
+                    const copy = row.slice();
+                    copy.splice(idx, 0, { cellContent: '',  cellAttributes: {} });
+                    return copy;
+                });
+
+                state.selected.cell = (at === state.selected.cell) ? state.selected.cell + 1 : state.selected.cell;
+                
+                render();
+            }
+            const addColumnBefore = () => {
+                addColumn(state.selected.cell);
+            }
+            const addColumnAfter = () => {
+                addColumn(state.selected.cell + 1); 
+            }
+
+            const removeRow = () => {
+                if(state.data.length <= 2) return;
+                if(state.selected.row === 0) {
+                    state.data.shift();
+                } else {
+                    state.data.splice(state.selected.row, 1);
+                }
+
+                render();
+            }
+
+            const removeColumn = () => {
+                if(state.data[0].length <= 1) return;
+                const cell = state.selected.cell;
+                state.data = state.data.map(row => { 
+                    const copy = row.slice(); 
+                    copy.splice(cell, 1); 
+                    return copy; 
+                });
+
+                render();
+            }
+
+            const convertToMarkdown = () => {
+                const detailsLabel = document.querySelector('input#details-label').value;
+                const lines = state.data.map((row, rowIndex) => {
+                    return `| ${row.map(cell => {
+                        let cellContent = cell.cellContent.trimEnd().replaceAll('\n', '<p>');
+                        if (cell.cellAttributes.anchor) cellContent = `<a id="${cell.cellAttributes.anchor}"></a> ` + cellContent;
+                        if (cell.cellAttributes.details) cellContent = cellContent + `<p>[${detailsLabel}](#${cell.cellAttributes.details})`;
+                        return cellContent;
+                    }
+                ).join(' | ')} |`;
+                });
+
+                const markdown = [lines[0], `| ${Array(state.data[0].length).fill('---').join(' | ')} |`, ...lines.slice(1)];
+
+                return markdown.join('\n');
+            }
+
+            const insertAnchor = () => {
+                const numbersColumn = Number(document.querySelector('input#numbers-column').value);
+                const parametersColumn = Number(document.querySelector('input#parameters-column').value);
+                if (numbersColumn > 0 && parametersColumn > 0 && state.selected.row > 0) {
+                    if (state.data[state.selected.row]) {
+                        const number = Number(state.data[state.selected.row][numbersColumn - 1].cellContent);
+                        const parameter = state.data[state.selected.row][parametersColumn - 1].cellContent.split('.').at(-1).replaceAll('*', '');
+                        state.data[state.selected.row][state.selected.cell].cellAttributes.anchor = `${number}-${parameter}`;
+                        render();
+                    }
+                }
+            }
+
+            const removeAnchor = () => {
+                if (state.data[state.selected.row][state.selected.cell].cellAttributes.anchor) delete(state.data[state.selected.row][state.selected.cell].cellAttributes.anchor);
+                render();
+            }
+
+            const removeDetailsLink = () => {
+                if (state.data[state.selected.row][state.selected.cell].cellAttributes.details) delete(state.data[state.selected.row][state.selected.cell].cellAttributes.details);
+                render();
+            }
+
+            const insertDetailsLink = () => {
+                const numbersColumn = Number(document.querySelector('input#numbers-column').value);
+                const parametersColumn = Number(document.querySelector('input#parameters-column').value);
+                if (numbersColumn > 0 && parametersColumn > 0 && state.selected.row > 0) {
+                    if (state.data[state.selected.row]) {
+                        const number = Number(state.data[state.selected.row][numbersColumn - 1].cellContent);
+                        const parameter = state.data[state.selected.row][parametersColumn - 1].cellContent.split('.').at(-1).replaceAll('*', '');
+                        state.data[state.selected.row][state.selected.cell].cellAttributes.details = `p${number}-${parameter}`;
+                        render();
+                    }
+                }
+            }
+
+            const generateDetails = () => {
+                const details = [];
+                state.data.slice(1).forEach(row => {
+                    const r = {};
+                    row.forEach(cell => {                    
+                        if (cell.cellAttributes.anchor !== (null || undefined)) r.anchor = cell.cellAttributes.anchor;
+                        if (cell.cellAttributes.details !== (null || undefined)) {
+                            r.details = cell.cellAttributes.details;
+                            r.title = cell.cellContent;
+                        }
+                    });
+                    if (Object.keys(r).length > 0) details.push(r)
+                });
+
+                if (details.length > 0) {
+                    const detailsContent = details.map(detail => {
+                        return `- <a id="${detail.details}"></a> - ${detail.title} [&#x2934;](#${detail.anchor})`;
+                        // &#x2934;
+                        // &#8617;
+                    }).join('\n\n');
+
+                    return detailsContent;
+                }
+
+                return null;
+            }
+
+            const renderMarkdown = () => {
+                const mdTable = convertToMarkdown();
+                const mdDetails = generateDetails();
+                let output = mdTable;
+                if (mdDetails !== null)  output = output + '\n\n### Подробнее\n\n' + mdDetails;
+                document.querySelector('textarea#markdown-output').value = output;
+            }
+
+            const replaceTextAll = () => {
+                const textFind = document.querySelector('input#text-find').value;
+                const textReplace = document.querySelector('input#text-replace').value;
+                if (textFind !== undefined && textReplace !== undefined && textFind.length > 0) {
+                    state.data.forEach(row => {
+                        row.forEach(cell => {
+                            cell.cellContent = cell.cellContent.replaceAll(textFind, textReplace);
+                        });
+                    });
+
+                    render();
+                }
+            }
+        </script>
+        <script src="md2.js"></script>
+    </head>
+
+    <body>
+        <section id="markdown" data-tabs>
+            <div class="tabs-list" role="tablist">
+                <button class="tab" role="tab" aria-selected="true" aria-controls="markdown-source" id="tab-1" tabindex="0">Markdown source</button>
+                <button class="tab" role="tab" aria-selected="true" aria-controls="markdown-output" id="tab-2" tabindex="-1">Markdown output</button>
+            </div>
+            <div id="markdown-source" class="tab-panel" role="tabpanel" tabindex="0" aria-labelledby="tab-1">
+                <textarea id="markdown-source" placeholder="Markdown source"></textarea>
+            </div>
+            <div id="markdown-output" class="tab-panel" role="tabpanel" tabindex="0" aria-labelledby="tab-2" hidden>
+                <textarea id="markdown-output" placeholder="Markdown output" readonly></textarea>
+            </div>
+        </section>
+        <section id="editor" data-tabs>
+            <div class="tabs-list" role="tablist">
+                <button class="tab" role="tab" aria-selected="true" aria-controls="table-editor" id="tab-1" tabindex="0">Table editor</button>
+                <button class="tab" role="tab" aria-selected="true" aria-controls="preview" id="tab-2" tabindex="-1">Preview</button>
+            </div>
+            <div id="table-editor" class="tab-panel" role="tabpanel" tabindex="0" aria-labelledby="tab-1">
+                <div id="editor-wrap">
+                    <div class="editor-controls" id="editor-controls"></div>
+                    <div id="table-root"></div>                    
+                </div>
+            </div>
+            <div id="preview" class="tab-panel" role="tabpanel" tabindex="0" aria-labelledby="tab-2" hidden>
+                <div id="preview-root"></div>
+            </div>
+        </section>
+    </body>
+</html>
