@@ -1,0 +1,37 @@
+image: node:20
+
+stages: [process]
+
+variables:
+  OUTPUT_DIR: "_publications"
+  TARGET_BRANCH: "develop"
+
+before_script:
+  - apt-get update -y && apt-get install -y git
+  - corepack enable || true
+  - npm ci
+
+process_and_commit:
+  stage: process
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "develop"'
+      when: on_success
+    - when: never
+
+  script:
+    - node scripts/run-all.js
+    - mkdir -p "$OUTPUT_DIR"
+    - |
+      if [ -z "$(git status --porcelain -- "$OUTPUT_DIR")" ]; then
+        echo "Нет изменений для коммита — выходим."
+        exit 0
+      fi
+
+    - git fetch origin "$TARGET_BRANCH"
+    - git checkout -B "$TARGET_BRANCH" "origin/$TARGET_BRANCH"
+    - git add "$OUTPUT_DIR"
+    - git config user.name  "ci-bot"
+    - git config user.email "ci-bot@noreply.local"
+    - git commit -m "ci: generate outputs for $CI_COMMIT_SHORT_SHA [skip ci]"
+    - git remote set-url origin "https://${REPO_PUSH_USER}:${REPO_PUSH_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
+    - git push origin "HEAD:$TARGET_BRANCH"
