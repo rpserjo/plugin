@@ -1,0 +1,186 @@
+<html>
+    <head>
+        <style>
+            #list {
+                height: 150px;
+                width: 100%;
+                border: 1px solid #ccc;
+                overflow: auto;
+                display: flex;
+                flex-direction: column;
+                gap: 3px;
+            }
+
+            .list-element {
+                cursor: pointer;
+                border-radius: 3px;
+                border: 1px solid #eee;
+                padding: 3px;
+            }
+
+            #search {
+                margin: 5px 0;
+            }
+
+            #result {
+                border: 1px solid #ccc;
+                overflow: auto;
+            }
+        </style>
+        <script>
+            const extractProperties = (schema, required = [], prefix = '') => {
+                const rows = [];
+
+                if (!schema || schema.type !== 'object' || !schema.properties) return rows;
+
+                for (const [propName, propValue] of Object.entries(schema.properties)) {
+                    const fullPath = prefix ? `${prefix}.${propName}` : propName;
+                    let type = propValue.type || (propValue.properties ? 'object' : 'any');
+                    type = (type === 'integer') ? 'number' : type;
+                    const isRequired = required.includes(propName);
+                    const title = propValue.title || '';
+                    const description = propValue.description || '';
+                    rows.push({
+                        path: fullPath,
+                        type,
+                        required: isRequired ? '+' : '-',
+                        description,
+                    });
+
+                    if (propValue.type === 'object' && propValue.properties) {
+                        rows.push(...extractProperties(propValue, propValue.required || [], fullPath));
+                    }
+
+                    if (propValue.type === 'array' && propValue.items) {
+                        const arrayPath = fullPath;    //`${fullPath}[]`;
+                        const items = propValue.items;
+                        const itemsType = items.type || (items.properties ? 'object' : 'any');
+
+                        if (items.type === 'object' && items.properties) {
+                            rows.push(...extractProperties(items, items.required || [], arrayPath));
+                        }
+                    }
+                }
+
+                return rows;
+            }
+            
+            let openapi;
+
+            document.addEventListener('DOMContentLoaded', async () => {
+                const response = await fetch('specification.json');
+                openapi = await response.json();
+
+                const seen = new Map();
+
+                const getRefValue = (ref, root) => {
+                    const path = ref.replace(/^#\//, '').split('/');
+                    return path.reduce((obj, key) => (obj ? obj[key] : undefined), root);
+                }
+
+                const resolveRefs = (obj, root) => {
+                    if (Array.isArray(obj)) {
+                        return obj.map(item => resolveRefs(item, root));
+                    } else if (typeof obj === 'object' && obj !== null) {
+                        if (obj.$ref) {
+                            const ref = obj.$ref;
+                            if (seen.has(ref)) {
+                                return seen.get(ref);
+                            }
+
+                            const resolved = getRefValue(ref, root);
+                            if (!resolved) {
+                                throw new Error(`Reference not found: ${ref}`);
+                            }
+                            seen.set(ref, resolved);
+
+                            const result = resolveRefs(resolved, root);
+                            seen.set(ref, result);
+                            return result;
+                        }
+
+                        const newObj = {};
+                        for (const [key, value] of Object.entries(obj)) {
+                            newObj[key] = resolveRefs(value, root);
+                        }
+                        return newObj;
+                    }
+                    return obj;
+                }
+
+                openapi.components.schemas = resolveRefs(openapi.components.schemas, openapi);
+                const seenKeys = Array.from(seen.keys());
+                const schemaKeys = Object.keys(openapi.components.schemas);
+                const businessMessages = schemaKeys.filter(key => {
+                    const title = openapi.components.schemas[key].title;
+                    if (title) {
+                        return title.indexOf('Бизнес сообщение') > -1;
+                    }
+                    return false;
+                }).map(key => {
+                    const title = openapi.components.schemas[key].title;
+                    return { key, title };
+                });
+
+                const search = (ref) => {
+                    const schema = openapi.components.schemas[ref];
+                    const resultRoot = document.querySelector('#result');
+                    resultRoot.innerHTML = '';
+                    if (schema) {
+                        const rows = extractProperties(schema, schema.required || []);
+                        
+                        const UCFirst = (input) => {
+                            return input.split('').map((l, i) => {
+                                return (i === 0) ? l.toUpperCase() : l;
+                            }).join('');
+                        }
+
+                        const boldPath = (path) => {
+                            const parts = path.split('.');
+                            parts[parts.length - 1] = '<b>' + parts[parts.length - 1] + '</b>';
+                            return parts.join('.');
+                        }
+
+                        if (rows.length > 0) {
+                            tbody = rows.map((row, index) => {
+                                return `<tr><td>${index + 1}</td><td>${boldPath(row.path)}</td><td>${UCFirst(row.type)}</td><td>${row.required === 'yes' ? '+' : '-'}</td><td>${row.description}</td></tr>`;
+                            }).join('');
+                            resultRoot.innerHTML = `<table><thead><tr><th>#</th><th>Param</th><th>Type</th><th>+/-</th><th>Name</th></tr><tbody>${tbody}</tbody></table>`;
+                        }
+                    } else {
+
+                    }
+                }
+
+                businessMessages.forEach(({ key, title }) => {
+                    const listRoot = document.querySelector('#list');
+                    const searchInput = document.querySelector('#searchValue');
+
+                    const el = document.createElement('div');
+                    el.classList.add('list-element');
+                    el.innerHTML = `${title} <i>(${key})</i>`;
+                    el.addEventListener('click', () => {
+                        searchInput.value = key;
+                        search(key);
+                    });
+
+                    listRoot.appendChild(el);                    
+                });
+
+                document.querySelector('#search').addEventListener('click', () => {
+                    const ref = document.querySelector('#searchValue').value;
+                    search(ref);
+                });
+            });
+        </script>
+    </head>
+    <body>
+        <div id="menu">
+            <div id="list"></div>
+            <div id="search">
+                <input type="text" id="searchValue" size="125"/><button id="search">Search</button>
+            </div>
+            <div id="result"></div>
+        </div>
+    </body>
+</html>
