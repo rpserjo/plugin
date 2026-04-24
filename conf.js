@@ -54,6 +54,85 @@ const tokenize = (xml) => {
 	return tokens;
 }
 
+const tokenize2 = (xml) => {
+	const tokens = [];
+	let i = 0;
+
+	while (i < xml.length) {
+		// CDATA
+		if (xml.startsWith('<![CDATA[', i)) {
+			const end = xml.indexOf(']]>', i);
+
+			if (end === -1) {
+				throw new Error('Unclosed CDATA section');
+			}
+
+			const value = xml.slice(i + 9, end);
+
+			tokens.push({
+				type: 'text',
+				value,
+				cdata: true
+			});
+
+			i = end + 3;
+			continue;
+		}
+
+		// normal tag
+		if (xml[i] === '<') {
+			const end = xml.indexOf('>', i);
+
+			if (end === -1) {
+				throw new Error('Unclosed tag');
+			}
+
+			const raw = xml.slice(i, end + 1);
+
+			if (raw.startsWith('</')) {
+				tokens.push({
+				type: 'close',
+				tag: raw.slice(2, -1).trim()
+				});
+			} else {
+				const selfClosing = raw.endsWith('/>');
+				const tagMatch = raw.match(/^<([\w:-]+)/);
+
+				const tag = tagMatch?.[1] || '';
+
+				const attrString =
+				raw.slice(tag.length + 1, selfClosing ? -2 : -1);
+
+				tokens.push({
+					type: selfClosing ? 'self' : 'open',
+					tag,
+					attrs: parseAttributes(attrString)
+				});
+			}
+
+			i = end + 1;
+			continue;
+		}
+
+		// plain text
+		let next = xml.indexOf('<', i);
+		if (next === -1) next = xml.length;
+
+		const value = xml.slice(i, next);
+
+		if (value.trim()) {
+			tokens.push({
+				type: 'text',
+				value
+			});
+		}
+
+		i = next;
+	}
+
+	return tokens;
+}
+
 const buildAst = (tokens) => {
 	const root = { type: 'root', children: [] };
 	const stack = [root];
