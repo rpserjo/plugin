@@ -32,7 +32,10 @@ function bpmnToMermaid(bpmnXml) {
         "userTask",
         "serviceTask",
         "exclusiveGateway",
-        "parallelGateway"
+        "parallelGateway",
+
+        // NEW
+        "dataObjectReference"
     ];
 
     supportedTags.forEach(tag => {
@@ -45,6 +48,69 @@ function bpmnToMermaid(bpmnXml) {
             addNode(id, name, tag);
         }
     });
+
+    const associations = [];
+
+    // dataInputAssociation
+    const inputAssociations =
+        xml.getElementsByTagNameNS("*", "dataInputAssociation");
+
+    for (const assoc of inputAssociations) {
+
+        const sources =
+            assoc.getElementsByTagNameNS("*", "sourceRef");
+
+        const targets =
+            assoc.getElementsByTagNameNS("*", "targetRef");
+
+        for (const s of sources) {
+            for (const t of targets) {
+
+                associations.push({
+                    source: s.textContent.trim(),
+                    target: t.textContent.trim(),
+                    type: "data"
+                });
+            }
+        }
+    }
+
+    // dataOutputAssociation
+    const outputAssociations =
+        xml.getElementsByTagNameNS("*", "dataOutputAssociation");
+
+    for (const assoc of outputAssociations) {
+
+        const sources =
+            assoc.getElementsByTagNameNS("*", "sourceRef");
+
+        const targets =
+            assoc.getElementsByTagNameNS("*", "targetRef");
+
+        for (const s of sources) {
+            for (const t of targets) {
+
+                associations.push({
+                    source: s.textContent.trim(),
+                    target: t.textContent.trim(),
+                    type: "data"
+                });
+            }
+        }
+    }
+
+    // generic association
+    const genericAssociations =
+        xml.getElementsByTagNameNS("*", "association");
+
+    for (const assoc of genericAssociations) {
+
+        associations.push({
+            source: assoc.getAttribute("sourceRef"),
+            target: assoc.getAttribute("targetRef"),
+            type: "association"
+        });
+    }
 
     // ----------------------------
     // parse sequence flows
@@ -65,10 +131,33 @@ function bpmnToMermaid(bpmnXml) {
     // Mermaid node renderer
     // ----------------------------
 
+    // function renderNode(node) {
+    //     const label = escapeLabel(node.label);
+
+    //     switch (node.type) {
+    //         case "startEvent":
+    //             return `${node.id}([${label}])`;
+
+    //         case "endEvent":
+    //             return `${node.id}([${label}])`;
+
+    //         case "exclusiveGateway":
+    //             return `${node.id}{${label}}`;
+
+    //         case "parallelGateway":
+    //             return `${node.id}{{${label}}}`;
+
+    //         default:
+    //             return `${node.id}[${label}]`;
+    //     }
+    // }
+
     function renderNode(node) {
+
         const label = escapeLabel(node.label);
 
         switch (node.type) {
+
             case "startEvent":
                 return `${node.id}([${label}])`;
 
@@ -81,10 +170,16 @@ function bpmnToMermaid(bpmnXml) {
             case "parallelGateway":
                 return `${node.id}{{${label}}}`;
 
+            // NEW
+            case "dataObjectReference":
+                return `${node.id}[/ ${label} /]`;
+
             default:
                 return `${node.id}[${label}]`;
         }
     }
+
+    
 
     function escapeLabel(text) {
         return text
@@ -119,7 +214,13 @@ function bpmnToMermaid(bpmnXml) {
         );
     }
 
+    for (const assoc of associations) {
+
+        // dotted line for data relation
+        lines.push(
+            `    ${assoc.source} -.-> ${assoc.target}`
+        );
+    }
+
     return lines.join("\n");
 }
-console.log(bpmnToMermaid(bpmn));
-```
